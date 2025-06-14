@@ -43,7 +43,7 @@ class MainActivity : AppCompatActivity() {
     private var originalText: String = ""
     private var translatedText: String = ""
     private var isTranslated = false
-
+    var isReadabilityMode = false
 
     // Handle camera result
     private val captureImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -98,6 +98,17 @@ class MainActivity : AppCompatActivity() {
                     isSpeaking = true
                     speakButton.text = getString(R.string.stop)
                 }
+            }
+        }
+
+        val readabilityButton = findViewById<Button>(R.id.readabilityToggleButton)
+        readabilityButton.setOnClickListener {
+            if (!isReadabilityMode) {
+                textView.textSize = 24f  // Increase text size
+                isReadabilityMode = true
+            } else {
+                textView.textSize = 18f  // Default size
+                isReadabilityMode = false
             }
         }
 
