@@ -3,29 +3,27 @@ package com.example.readeasy
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.*
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
-import android.widget.Button
-import android.widget.ImageView
-import android.widget.TextView
-import android.widget.Toast
+import android.speech.tts.TextToSpeech
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.room.Room
+import com.google.mlkit.nl.translate.TranslateLanguage
+import com.google.mlkit.nl.translate.Translation
+import com.google.mlkit.nl.translate.TranslatorOptions
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import android.speech.tts.TextToSpeech
-import com.google.mlkit.nl.translate.TranslateLanguage
-import com.google.mlkit.nl.translate.TranslatorOptions
-import com.google.mlkit.nl.translate.Translation
-import java.util.Locale
+import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -36,31 +34,25 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textView: TextView
     private lateinit var photoUri: Uri
     private lateinit var photoFile: File
+    private lateinit var tts: TextToSpeech
+
     private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val CAMERA_PERMISSION_CODE = 100
-    private lateinit var tts: TextToSpeech
     private var isSpeaking = false
+    private var isTranslated = false
+    private var isReadabilityMode = false
     private var originalText: String = ""
     private var translatedText: String = ""
-    private var isTranslated = false
-    var isReadabilityMode = false
 
-    // Handle camera result
     private val captureImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
-            val rawBitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
-            if (rawBitmap != null) {
-                val preprocessed = preprocessBitmap(rawBitmap)
-                imageView.setImageBitmap(preprocessed)
-                val image = InputImage.fromBitmap(preprocessed, 0)
-                processImage(image)
-            } else {
-                Toast.makeText(this, "Failed to load captured image", Toast.LENGTH_SHORT).show()
-            }
+            val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
+            val preprocessed = preprocessBitmap(bitmap)
+            imageView.setImageBitmap(preprocessed)
+            processImage(InputImage.fromBitmap(preprocessed, 0))
         }
     }
 
-    // Handle gallery selection
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             imageView.setImageURI(it)
@@ -68,7 +60,7 @@ class MainActivity : AppCompatActivity() {
                 val image = InputImage.fromFilePath(this, it)
                 processImage(image)
             } catch (e: Exception) {
-                Toast.makeText(this, "Failed to load image: ${e.message}", Toast.LENGTH_LONG).show()
+                showToast("Failed to load image: ${e.message}")
             }
         }
     }
@@ -77,50 +69,32 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        tts = TextToSpeech(this) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts.language = Locale.US  // or use Locale.UK, Locale("en", "IN"), etc.
-            } else {
-                Toast.makeText(this, "TTS initialization failed", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        val speakButton = findViewById<Button>(R.id.speakButton)
-        speakButton.setOnClickListener {
-            val text = textView.text.toString()
-            if (text.isNotEmpty()) {
-                if (isSpeaking) {
-                    tts.stop()
-                    isSpeaking = false
-                    speakButton.text = getString(R.string.speak)
-                } else {
-                    tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
-                    isSpeaking = true
-                    speakButton.text = getString(R.string.stop)
-                }
-            }
-        }
-
-        val readabilityButton = findViewById<Button>(R.id.readabilityToggleButton)
-        readabilityButton.setOnClickListener {
-            if (!isReadabilityMode) {
-                textView.textSize = 24f  // Increase text size
-                isReadabilityMode = true
-            } else {
-                textView.textSize = 18f  // Default size
-                isReadabilityMode = false
-            }
-        }
-
-
         imageView = findViewById(R.id.imageView)
         textView = findViewById(R.id.textView)
+        textView.typeface = Typeface.createFromAsset(assets, "fonts/OpenDyslexic-Regular.ttf")
+
+        initializeTextToSpeech()
+        setupButtons()
+    }
+
+    private fun initializeTextToSpeech() {
+        tts = TextToSpeech(this) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts.language = Locale.US
+            } else {
+                showToast("TTS initialization failed")
+            }
+        }
+    }
+
+    private fun setupButtons() {
         val captureButton = findViewById<Button>(R.id.captureButton)
         val uploadButton = findViewById<Button>(R.id.uploadButton)
-
-        // Load dyslexia-friendly font
-        val typeface = Typeface.createFromAsset(assets, "fonts/OpenDyslexic-Regular.ttf")
-        textView.typeface = typeface
+        val speakButton = findViewById<ImageButton>(R.id.speakButton)
+        val translateButton = findViewById<ImageButton>(R.id.translateButton)
+        val readabilityButton = findViewById<Button>(R.id.readabilityToggleButton)
+        val saveButton = findViewById<ImageButton>(R.id.saveButton)
+        val historyButton = findViewById<ImageButton>(R.id.historyButton)
 
         captureButton.setOnClickListener {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -140,48 +114,76 @@ class MainActivity : AppCompatActivity() {
             pickImage.launch("image/*")
         }
 
-        val translateButton = findViewById<Button>(R.id.translateButton)
+        speakButton.setOnClickListener {
+            val text = textView.text.toString()
+            if (text.isNotBlank()) {
+                if (isSpeaking) {
+                    tts.stop()
+                    isSpeaking = false
+                } else {
+                    tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+                    isSpeaking = true
+                }
+            }
+        }
+
         translateButton.setOnClickListener {
             if (textView.text.isBlank()) {
-                Toast.makeText(this, "No text to translate", Toast.LENGTH_SHORT).show()
+                showToast("No text to translate")
                 return@setOnClickListener
             }
 
             if (!isTranslated) {
-                // First time translating
                 originalText = textView.text.toString()
-
                 val options = TranslatorOptions.Builder()
                     .setSourceLanguage(TranslateLanguage.ENGLISH)
                     .setTargetLanguage(TranslateLanguage.HINDI)
                     .build()
 
                 val translator = Translation.getClient(options)
-
                 translator.downloadModelIfNeeded()
                     .addOnSuccessListener {
                         translator.translate(originalText)
                             .addOnSuccessListener { result ->
                                 translatedText = result
                                 textView.text = translatedText
-                                translateButton.text = "Show Original"
                                 isTranslated = true
                             }
                             .addOnFailureListener { e ->
-                                Toast.makeText(this, "Translation failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                showToast("Translation failed: ${e.message}")
                             }
                     }
                     .addOnFailureListener { e ->
-                        Toast.makeText(this, "Model download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                        showToast("Model download failed: ${e.message}")
                     }
             } else {
-                // Show original English
                 textView.text = originalText
-                translateButton.text = "Translate to Hindi"
                 isTranslated = false
             }
         }
 
+        readabilityButton.setOnClickListener {
+            textView.textSize = if (!isReadabilityMode) 24f else 18f
+            isReadabilityMode = !isReadabilityMode
+        }
+
+        val db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "saved_texts_db").build()
+
+        saveButton.setOnClickListener {
+            val content = textView.text.toString()
+            if (content.isNotBlank()) {
+                lifecycleScope.launch {
+                    db.savedTextDao().insert(SavedText(content = content))
+                    runOnUiThread {
+                        showToast("Saved!")
+                    }
+                }
+            }
+        }
+
+        historyButton.setOnClickListener {
+            startActivity(Intent(this, SavedTextsActivity::class.java))
+        }
     }
 
     private fun dispatchTakePictureIntent() {
@@ -197,32 +199,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun preprocessBitmap(bitmap: Bitmap): Bitmap {
-        val width = bitmap.width
-        val height = bitmap.height
-        val result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val result = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+        val paint = Paint()
 
-        val canvas = android.graphics.Canvas(result)
-        val paint = android.graphics.Paint()
-        val colorMatrix = android.graphics.ColorMatrix()
-        colorMatrix.setSaturation(0f) // Grayscale
-
-        // Increase contrast
+        val grayscaleMatrix = ColorMatrix().apply { setSaturation(0f) }
         val contrast = 1.5f
-        val scale = contrast
-        val translate = (-0.5f * scale + 0.5f) * 255f
-        val contrastMatrix = android.graphics.ColorMatrix(
+        val translate = (-0.5f * contrast + 0.5f) * 255f
+        val contrastMatrix = ColorMatrix(
             floatArrayOf(
-                scale, 0f, 0f, 0f, translate,
-                0f, scale, 0f, 0f, translate,
-                0f, 0f, scale, 0f, translate,
+                contrast, 0f, 0f, 0f, translate,
+                0f, contrast, 0f, 0f, translate,
+                0f, 0f, contrast, 0f, translate,
                 0f, 0f, 0f, 1f, 0f
             )
         )
+        grayscaleMatrix.postConcat(contrastMatrix)
 
-        colorMatrix.postConcat(contrastMatrix)
-        paint.colorFilter = android.graphics.ColorMatrixColorFilter(colorMatrix)
+        paint.colorFilter = ColorMatrixColorFilter(grayscaleMatrix)
         canvas.drawBitmap(bitmap, 0f, 0f, paint)
-
         return result
     }
 
@@ -232,22 +227,22 @@ class MainActivity : AppCompatActivity() {
                 textView.text = visionText.text
             }
             .addOnFailureListener { e ->
-                Toast.makeText(this, "Text recognition failed: ${e.message}", Toast.LENGTH_LONG).show()
+                showToast("Text recognition failed: ${e.message}")
             }
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
+    private fun showToast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == CAMERA_PERMISSION_CODE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                dispatchTakePictureIntent()
-            } else {
-                Toast.makeText(this, "Camera permission denied", Toast.LENGTH_SHORT).show()
-            }
+        if (requestCode == CAMERA_PERMISSION_CODE &&
+            grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+        ) {
+            dispatchTakePictureIntent()
+        } else {
+            showToast("Camera permission denied")
         }
     }
 
@@ -258,5 +253,4 @@ class MainActivity : AppCompatActivity() {
             tts.shutdown()
         }
     }
-
 }
