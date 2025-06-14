@@ -40,6 +40,10 @@ class MainActivity : AppCompatActivity() {
     private val CAMERA_PERMISSION_CODE = 100
     private lateinit var tts: TextToSpeech
     private var isSpeaking = false
+    private var originalText: String = ""
+    private var translatedText: String = ""
+    private var isTranslated = false
+
 
     // Handle camera result
     private val captureImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -127,12 +131,18 @@ class MainActivity : AppCompatActivity() {
 
         val translateButton = findViewById<Button>(R.id.translateButton)
         translateButton.setOnClickListener {
-            val originalText = textView.text.toString()
+            if (textView.text.isBlank()) {
+                Toast.makeText(this, "No text to translate", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
 
-            if (originalText.isNotBlank()) {
+            if (!isTranslated) {
+                // First time translating
+                originalText = textView.text.toString()
+
                 val options = TranslatorOptions.Builder()
                     .setSourceLanguage(TranslateLanguage.ENGLISH)
-                    .setTargetLanguage(TranslateLanguage.HINDI) // or any other language code
+                    .setTargetLanguage(TranslateLanguage.HINDI)
                     .build()
 
                 val translator = Translation.getClient(options)
@@ -140,8 +150,11 @@ class MainActivity : AppCompatActivity() {
                 translator.downloadModelIfNeeded()
                     .addOnSuccessListener {
                         translator.translate(originalText)
-                            .addOnSuccessListener { translatedText ->
+                            .addOnSuccessListener { result ->
+                                translatedText = result
                                 textView.text = translatedText
+                                translateButton.text = "Show Original"
+                                isTranslated = true
                             }
                             .addOnFailureListener { e ->
                                 Toast.makeText(this, "Translation failed: ${e.message}", Toast.LENGTH_LONG).show()
@@ -151,7 +164,10 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this, "Model download failed: ${e.message}", Toast.LENGTH_LONG).show()
                     }
             } else {
-                Toast.makeText(this, "No text to translate", Toast.LENGTH_SHORT).show()
+                // Show original English
+                textView.text = originalText
+                translateButton.text = "Translate to Hindi"
+                isTranslated = false
             }
         }
 
