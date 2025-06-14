@@ -22,6 +22,9 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import android.speech.tts.TextToSpeech
+import com.google.mlkit.nl.translate.TranslateLanguage
+import com.google.mlkit.nl.translate.TranslatorOptions
+import com.google.mlkit.nl.translate.Translation
 import java.util.Locale
 import java.io.File
 import java.text.SimpleDateFormat
@@ -121,6 +124,37 @@ class MainActivity : AppCompatActivity() {
         uploadButton.setOnClickListener {
             pickImage.launch("image/*")
         }
+
+        val translateButton = findViewById<Button>(R.id.translateButton)
+        translateButton.setOnClickListener {
+            val originalText = textView.text.toString()
+
+            if (originalText.isNotBlank()) {
+                val options = TranslatorOptions.Builder()
+                    .setSourceLanguage(TranslateLanguage.ENGLISH)
+                    .setTargetLanguage(TranslateLanguage.HINDI) // or any other language code
+                    .build()
+
+                val translator = Translation.getClient(options)
+
+                translator.downloadModelIfNeeded()
+                    .addOnSuccessListener {
+                        translator.translate(originalText)
+                            .addOnSuccessListener { translatedText ->
+                                textView.text = translatedText
+                            }
+                            .addOnFailureListener { e ->
+                                Toast.makeText(this, "Translation failed: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                    }
+                    .addOnFailureListener { e ->
+                        Toast.makeText(this, "Model download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+            } else {
+                Toast.makeText(this, "No text to translate", Toast.LENGTH_SHORT).show()
+            }
+        }
+
     }
 
     private fun dispatchTakePictureIntent() {
