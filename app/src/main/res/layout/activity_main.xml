@@ -24,7 +24,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textSize="18sp"
-            android:textColor="#FFFFFF" />
+            android:textColor="#FFFFFF"
+            android:textIsSelectable="true" />
     </ScrollView>
 
 
@@ -41,4 +42,12 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="Upload Image" />
+
+    <Button
+        android:id="@+id/speakButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Speak" />
+
 </LinearLayout>

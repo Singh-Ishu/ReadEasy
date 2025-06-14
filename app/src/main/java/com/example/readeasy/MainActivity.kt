@@ -21,6 +21,8 @@ import androidx.core.content.FileProvider
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -33,6 +35,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var photoFile: File
     private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val CAMERA_PERMISSION_CODE = 100
+    private lateinit var tts: TextToSpeech
+    private var isSpeaking = false
 
     // Handle camera result
     private val captureImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -65,6 +69,31 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        tts = TextToSpeech(this) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts.language = Locale.US  // or use Locale.UK, Locale("en", "IN"), etc.
+            } else {
+                Toast.makeText(this, "TTS initialization failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        val speakButton = findViewById<Button>(R.id.speakButton)
+        speakButton.setOnClickListener {
+            val text = textView.text.toString()
+            if (text.isNotEmpty()) {
+                if (isSpeaking) {
+                    tts.stop()
+                    isSpeaking = false
+                    speakButton.text = getString(R.string.speak)
+                } else {
+                    tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+                    isSpeaking = true
+                    speakButton.text = getString(R.string.stop)
+                }
+            }
+        }
+
 
         imageView = findViewById(R.id.imageView)
         textView = findViewById(R.id.textView)
@@ -160,4 +189,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (::tts.isInitialized) {
+            tts.stop()
+            tts.shutdown()
+        }
+    }
+
 }

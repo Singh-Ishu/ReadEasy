@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">ReadEasy</string>
+    <string name="speak">Speak</string>
+    <string name="stop">Stop</string>
 </resources>
