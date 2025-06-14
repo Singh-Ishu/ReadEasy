@@ -3,6 +3,7 @@ package com.example.readeasy
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Typeface
 import android.net.Uri
@@ -33,20 +34,31 @@ class MainActivity : AppCompatActivity() {
     private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val CAMERA_PERMISSION_CODE = 100
 
+    // Handle camera result
     private val captureImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
-            val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
-            imageView.setImageBitmap(bitmap)
-            val image = InputImage.fromFilePath(this, photoUri)
-            processImage(image)
+            val rawBitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
+            if (rawBitmap != null) {
+                val preprocessed = preprocessBitmap(rawBitmap)
+                imageView.setImageBitmap(preprocessed)
+                val image = InputImage.fromBitmap(preprocessed, 0)
+                processImage(image)
+            } else {
+                Toast.makeText(this, "Failed to load captured image", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
+    // Handle gallery selection
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             imageView.setImageURI(it)
-            val image = InputImage.fromFilePath(this, it)
-            processImage(image)
+            try {
+                val image = InputImage.fromFilePath(this, it)
+                processImage(image)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Failed to load image: ${e.message}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -59,14 +71,19 @@ class MainActivity : AppCompatActivity() {
         val captureButton = findViewById<Button>(R.id.captureButton)
         val uploadButton = findViewById<Button>(R.id.uploadButton)
 
+        // Load dyslexia-friendly font
         val typeface = Typeface.createFromAsset(assets, "fonts/OpenDyslexic-Regular.ttf")
         textView.typeface = typeface
 
         captureButton.setOnClickListener {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                    arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_CODE)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.CAMERA),
+                    CAMERA_PERMISSION_CODE
+                )
             } else {
                 dispatchTakePictureIntent()
             }
@@ -89,6 +106,36 @@ class MainActivity : AppCompatActivity() {
         captureImage.launch(takePictureIntent)
     }
 
+    private fun preprocessBitmap(bitmap: Bitmap): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        val result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+
+        val canvas = android.graphics.Canvas(result)
+        val paint = android.graphics.Paint()
+        val colorMatrix = android.graphics.ColorMatrix()
+        colorMatrix.setSaturation(0f) // Grayscale
+
+        // Increase contrast
+        val contrast = 1.5f
+        val scale = contrast
+        val translate = (-0.5f * scale + 0.5f) * 255f
+        val contrastMatrix = android.graphics.ColorMatrix(
+            floatArrayOf(
+                scale, 0f, 0f, 0f, translate,
+                0f, scale, 0f, 0f, translate,
+                0f, 0f, scale, 0f, translate,
+                0f, 0f, 0f, 1f, 0f
+            )
+        )
+
+        colorMatrix.postConcat(contrastMatrix)
+        paint.colorFilter = android.graphics.ColorMatrixColorFilter(colorMatrix)
+        canvas.drawBitmap(bitmap, 0f, 0f, paint)
+
+        return result
+    }
+
     private fun processImage(image: InputImage) {
         textRecognizer.process(image)
             .addOnSuccessListener { visionText ->
@@ -99,7 +146,11 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == CAMERA_PERMISSION_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
