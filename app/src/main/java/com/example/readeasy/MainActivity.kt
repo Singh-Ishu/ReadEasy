@@ -167,7 +167,14 @@ class MainActivity : AppCompatActivity() {
             isReadabilityMode = !isReadabilityMode
         }
 
-        val db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "saved_texts_db").build()
+        val db = Room.databaseBuilder(
+            applicationContext,
+            AppDatabase::class.java,
+            "saved_texts_db"
+        )
+            .fallbackToDestructiveMigration() // add this line
+            .build()
+
 
         saveButton.setOnClickListener {
             val content = textView.text.toString()

@@ -30,6 +30,6 @@
                 android:resource="@xml/file_paths" />
         </provider>
         <activity android:name=".SavedTextsActivity" />
-
+        <activity android:name=".SavedTextDetailActivity" />
     </application>
 </manifest>

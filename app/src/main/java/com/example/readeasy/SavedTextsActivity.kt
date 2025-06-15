@@ -1,38 +1,50 @@
 package com.example.readeasy
 
+import android.content.Intent
 import android.os.Bundle
-import java.util.Date
-import android.widget.ArrayAdapter
-import android.widget.ListView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.room.Room
 import kotlinx.coroutines.launch
 
 class SavedTextsActivity : AppCompatActivity() {
 
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var db: AppDatabase
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_saved_texts)
 
-        val listView = findViewById<ListView>(R.id.savedTextsList)
-        val db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "saved_texts_db").build()
+        db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "saved_texts_db").build()
+        recyclerView = findViewById(R.id.savedTextsList)
+        recyclerView.layoutManager = LinearLayoutManager(this)
 
+        loadSavedTexts()
+    }
+
+    private fun loadSavedTexts() {
         lifecycleScope.launch {
             val savedTexts = db.savedTextDao().getAll()
-            val items = savedTexts.map {
-                val preview = it.content.take(40).replace("\n", " ")  // Preview first 40 chars
-                "$preview... (${Date(it.timestamp)})"
-            }
 
             runOnUiThread {
-                val adapter = ArrayAdapter(this@SavedTextsActivity, android.R.layout.simple_list_item_1, items)
-                listView.adapter = adapter
-
-                listView.setOnItemClickListener { _, _, position, _ ->
-                    Toast.makeText(this@SavedTextsActivity, savedTexts[position].content, Toast.LENGTH_LONG).show()
-                }
+                val adapter = SavedTextsAdapter(
+                    savedTexts,
+                    onDelete = { text ->
+                        lifecycleScope.launch {
+                            db.savedTextDao().delete(text)
+                            loadSavedTexts() // refresh list after deletion
+                        }
+                    },
+                    onOpen = { text ->
+                        val intent = Intent(this@SavedTextsActivity, SavedTextDetailActivity::class.java)
+                        intent.putExtra("textContent", text.content)
+                        startActivity(intent)
+                    }
+                )
+                recyclerView.adapter = adapter
             }
         }
     }
