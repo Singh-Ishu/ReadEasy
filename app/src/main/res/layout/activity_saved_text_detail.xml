@@ -29,5 +29,5 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:backgroundTint="?attr/colorPrimary"
-        android:text="Toggle Readability Mode" />
+        android:text="SUPER Readability Mode" />
 </LinearLayout>
