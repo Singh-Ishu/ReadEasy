@@ -195,5 +195,4 @@ It's **freedom** in your pocket.
 ---
 
 ## 🧑‍💻 Contributors
-
-* Yours truly: Singh-Ishu <3
+Singh-Ishu <3
