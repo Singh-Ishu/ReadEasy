@@ -194,5 +194,6 @@ It's **freedom** in your pocket.
 
 ---
 
-## 🧑‍💻 Contributors
-Singh-Ishu <3
+Made with ❤️ by [Singh-Ishu](https://github.com/Singh-Ishu)  
+Feel free to ⭐ this repo if you found it helpful!
+
