@@ -22,7 +22,7 @@ That’s the future ReadEasy is building.
   Built on **ML Kit’s Text Recognition v2**, optimized for high accuracy on documents, handwritten notes, and printed text. Achieves over **95% real-world character accuracy** on common datasets.
 
 * **Instant Translation** *(Optional download per language)*
-  Powered by **ML Kit Translate** — translating recognized text into **100+ supported languages**. All translation is local, fast, and **privacy-preserving**. Download a language once, translate forever.
+  Powered by **ML Kit Translate** — translating recognized text into **50+ supported languages**. All translation is local, fast, and **privacy-preserving**. Download a language once, translate forever.
 
 * **Dyslexia-Friendly Readability Mode**
   Uses the **OpenDyslexic** typeface with dynamic spacing and scaling. In testing, this improved reading comprehension speed by **32%** on average for dyslexic readers.
