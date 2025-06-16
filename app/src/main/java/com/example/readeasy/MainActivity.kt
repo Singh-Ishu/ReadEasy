@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
 import android.widget.*
+import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -19,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.room.Room
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
+import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -32,17 +34,22 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var imageView: ImageView
     private lateinit var textView: TextView
+    private lateinit var languageSelector: Spinner
+    private lateinit var translator: Translator
     private lateinit var photoUri: Uri
     private lateinit var photoFile: File
     private lateinit var tts: TextToSpeech
 
-    private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-    private val CAMERA_PERMISSION_CODE = 100
+    private var selectedLanguageCode: String = TranslateLanguage.HINDI
     private var isSpeaking = false
     private var isTranslated = false
     private var isReadabilityMode = false
+    private var isModelReady = false
     private var originalText: String = ""
     private var translatedText: String = ""
+
+    private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    private val CAMERA_PERMISSION_CODE = 100
 
     private val captureImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
@@ -73,9 +80,116 @@ class MainActivity : AppCompatActivity() {
         textView = findViewById(R.id.textView)
         textView.typeface = Typeface.createFromAsset(assets, "fonts/OpenDyslexic-Regular.ttf")
 
+        languageSelector = findViewById(R.id.languageSelector)
+        val languageMap = mapOf(
+            "Afrikaans" to TranslateLanguage.AFRIKAANS,
+            "Albanian" to TranslateLanguage.ALBANIAN,
+            "Arabic" to TranslateLanguage.ARABIC,
+            "Belarusian" to TranslateLanguage.BELARUSIAN,
+            "Bengali" to TranslateLanguage.BENGALI,
+            "Bulgarian" to TranslateLanguage.BULGARIAN,
+            "Catalan" to TranslateLanguage.CATALAN,
+            "Chinese (Simplified)" to TranslateLanguage.CHINESE,
+            "Croatian" to TranslateLanguage.CROATIAN,
+            "Czech" to TranslateLanguage.CZECH,
+            "Danish" to TranslateLanguage.DANISH,
+            "Dutch" to TranslateLanguage.DUTCH,
+            "English" to TranslateLanguage.ENGLISH,
+            "Esperanto" to TranslateLanguage.ESPERANTO,
+            "Estonian" to TranslateLanguage.ESTONIAN,
+            "Finnish" to TranslateLanguage.FINNISH,
+            "French" to TranslateLanguage.FRENCH,
+            "Galician" to TranslateLanguage.GALICIAN,
+            "Georgian" to TranslateLanguage.GEORGIAN,
+            "German" to TranslateLanguage.GERMAN,
+            "Greek" to TranslateLanguage.GREEK,
+            "Gujarati" to TranslateLanguage.GUJARATI,
+            "Haitian Creole" to TranslateLanguage.HAITIAN_CREOLE,
+            "Hebrew" to TranslateLanguage.HEBREW,
+            "Hindi" to TranslateLanguage.HINDI,
+            "Hungarian" to TranslateLanguage.HUNGARIAN,
+            "Icelandic" to TranslateLanguage.ICELANDIC,
+            "Indonesian" to TranslateLanguage.INDONESIAN,
+            "Irish" to TranslateLanguage.IRISH,
+            "Italian" to TranslateLanguage.ITALIAN,
+            "Japanese" to TranslateLanguage.JAPANESE,
+            "Kannada" to TranslateLanguage.KANNADA,
+            "Korean" to TranslateLanguage.KOREAN,
+            "Latvian" to TranslateLanguage.LATVIAN,
+            "Lithuanian" to TranslateLanguage.LITHUANIAN,
+            "Macedonian" to TranslateLanguage.MACEDONIAN,
+            "Malay" to TranslateLanguage.MALAY,
+            "Maltese" to TranslateLanguage.MALTESE,
+            "Marathi" to TranslateLanguage.MARATHI,
+            "Norwegian" to TranslateLanguage.NORWEGIAN,
+            "Persian" to TranslateLanguage.PERSIAN,
+            "Polish" to TranslateLanguage.POLISH,
+            "Portuguese" to TranslateLanguage.PORTUGUESE,
+            "Romanian" to TranslateLanguage.ROMANIAN,
+            "Russian" to TranslateLanguage.RUSSIAN,
+            "Slovak" to TranslateLanguage.SLOVAK,
+            "Slovenian" to TranslateLanguage.SLOVENIAN,
+            "Spanish" to TranslateLanguage.SPANISH,
+            "Swahili" to TranslateLanguage.SWAHILI,
+            "Swedish" to TranslateLanguage.SWEDISH,
+            "Tagalog" to TranslateLanguage.TAGALOG,
+            "Tamil" to TranslateLanguage.TAMIL,
+            "Telugu" to TranslateLanguage.TELUGU,
+            "Thai" to TranslateLanguage.THAI,
+            "Turkish" to TranslateLanguage.TURKISH,
+            "Ukrainian" to TranslateLanguage.UKRAINIAN,
+            "Urdu" to TranslateLanguage.URDU,
+            "Vietnamese" to TranslateLanguage.VIETNAMESE,
+            "Welsh" to TranslateLanguage.WELSH
+        )
+
+
+        val languageNames = languageMap.keys.toList()
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, languageNames)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        languageSelector.adapter = adapter
+
+        languageSelector.setSelection(languageNames.indexOf("Hindi"))
+        selectedLanguageCode = languageMap["Hindi"] ?: TranslateLanguage.HINDI
+        setupTranslator(selectedLanguageCode)
+
+        languageSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val selectedLanguage = languageNames[position]
+                selectedLanguageCode = languageMap[selectedLanguage] ?: TranslateLanguage.HINDI
+                setupTranslator(selectedLanguageCode)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
         initializeTextToSpeech()
         setupButtons()
     }
+
+    private fun setupTranslator(languageCode: String) {
+        isModelReady = false
+
+        val options = TranslatorOptions.Builder()
+            .setSourceLanguage(TranslateLanguage.ENGLISH)
+            .setTargetLanguage(languageCode)
+            .build()
+
+        val tempTranslator = Translation.getClient(options)
+
+        tempTranslator.downloadModelIfNeeded()
+            .addOnSuccessListener {
+                translator = tempTranslator
+                isModelReady = true
+                showToast("Model for $languageCode is ready")
+            }
+            .addOnFailureListener { e ->
+                isModelReady = false
+                showToast("Failed to prepare model for $languageCode: ${e.message}")
+            }
+    }
+
+
 
     private fun initializeTextToSpeech() {
         tts = TextToSpeech(this) { status ->
@@ -97,14 +211,8 @@ class MainActivity : AppCompatActivity() {
         val historyButton = findViewById<ImageButton>(R.id.historyButton)
 
         captureButton.setOnClickListener {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.CAMERA),
-                    CAMERA_PERMISSION_CODE
-                )
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_CODE)
             } else {
                 dispatchTakePictureIntent()
             }
@@ -128,6 +236,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         translateButton.setOnClickListener {
+            if (!isModelReady) {
+                showToast("Translation model not ready yet. Please wait.")
+                return@setOnClickListener
+            }
+
             if (textView.text.isBlank()) {
                 showToast("No text to translate")
                 return@setOnClickListener
@@ -135,26 +248,14 @@ class MainActivity : AppCompatActivity() {
 
             if (!isTranslated) {
                 originalText = textView.text.toString()
-                val options = TranslatorOptions.Builder()
-                    .setSourceLanguage(TranslateLanguage.ENGLISH)
-                    .setTargetLanguage(TranslateLanguage.HINDI)
-                    .build()
-
-                val translator = Translation.getClient(options)
-                translator.downloadModelIfNeeded()
-                    .addOnSuccessListener {
-                        translator.translate(originalText)
-                            .addOnSuccessListener { result ->
-                                translatedText = result
-                                textView.text = translatedText
-                                isTranslated = true
-                            }
-                            .addOnFailureListener { e ->
-                                showToast("Translation failed: ${e.message}")
-                            }
+                translator.translate(originalText)
+                    .addOnSuccessListener { result ->
+                        translatedText = result
+                        textView.text = translatedText
+                        isTranslated = true
                     }
                     .addOnFailureListener { e ->
-                        showToast("Model download failed: ${e.message}")
+                        showToast("Translation failed: ${e.message}")
                     }
             } else {
                 textView.text = originalText
@@ -162,28 +263,22 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+
         readabilityButton.setOnClickListener {
             textView.textSize = if (!isReadabilityMode) 24f else 18f
             isReadabilityMode = !isReadabilityMode
         }
 
-        val db = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java,
-            "saved_texts_db"
-        )
-            .fallbackToDestructiveMigration() // add this line
+        val db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "saved_texts_db")
+            .fallbackToDestructiveMigration()
             .build()
-
 
         saveButton.setOnClickListener {
             val content = textView.text.toString()
             if (content.isNotBlank()) {
                 lifecycleScope.launch {
                     db.savedTextDao().insert(SavedText(content = content))
-                    runOnUiThread {
-                        showToast("Saved!")
-                    }
+                    runOnUiThread { showToast("Saved!") }
                 }
             }
         }
@@ -209,7 +304,6 @@ class MainActivity : AppCompatActivity() {
         val result = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(result)
         val paint = Paint()
-
         val grayscaleMatrix = ColorMatrix().apply { setSaturation(0f) }
         val contrast = 1.5f
         val translate = (-0.5f * contrast + 0.5f) * 255f
@@ -230,12 +324,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun processImage(image: InputImage) {
         textRecognizer.process(image)
-            .addOnSuccessListener { visionText ->
-                textView.text = visionText.text
-            }
-            .addOnFailureListener { e ->
-                showToast("Text recognition failed: ${e.message}")
-            }
+            .addOnSuccessListener { visionText -> textView.text = visionText.text }
+            .addOnFailureListener { e -> showToast("Text recognition failed: ${e.message}") }
     }
 
     private fun showToast(message: String) {

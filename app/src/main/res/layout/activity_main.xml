@@ -70,6 +70,16 @@
         android:layout_marginTop="12dp"
         android:text="SUPER Readability Mode" />
 
+    <Spinner
+        android:id="@+id/languageSelector"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:layout_marginTop="8dp"
+        android:spinnerMode="dropdown"
+        android:backgroundTint="#FFFFFF"
+        android:popupBackground="#1E1E1E"/>
+
     <!-- Action Icons -->
     <LinearLayout
         android:id="@+id/actionIconsRow"
